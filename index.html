@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8">
   <title>QuandoVuoi</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { background: #E7FE55; display: flex; align-items: center; justify-content: center; min-height: 100vh; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
@@ -10,6 +11,24 @@
     #__bundler_thumbnail { position: fixed; inset: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: #E7FE55; z-index: 9999; }
     #__bundler_thumbnail svg { width: 100%; height: 100%; object-fit: contain; }
     #__bundler_placeholder { color: #999; font-size: 14px; }
+  </style>
+  <meta name="theme-color" content="#E7FE55">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+
+  <style>
+    /* Desktop: show the framed thumbnail */
+    #__bundler_thumbnail { display: flex; }
+
+    /* Mobile: hide frame, present as standalone app */
+    @media (max-width: 800px) {
+      #__bundler_thumbnail { display: none !important; }
+      #__bundler_loading { left: 12px; right: 12px; bottom: 12px; border-radius: 12px; }
+      html, body { height: 100%; }
+      body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+    }
   </style>
 
 
