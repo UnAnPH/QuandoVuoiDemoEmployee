@@ -808,6 +808,7 @@ function HomeScreen({ onHistory, onProfile, onNotifications }) {
 
 export default function App() {
   const [screen, setScreen] = useState("home");
+  const [showFrame, setShowFrame] = useState(true);
   useEffect(() => {
     const s = document.createElement("style");
     s.textContent = FONT_CSS + `
@@ -824,17 +825,40 @@ export default function App() {
     document.head.appendChild(s);
     return () => document.head.removeChild(s);
   }, []);
+  // Detect touch / coarse pointer devices and hide the decorative phone frame there.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia && window.matchMedia('(pointer: coarse)');
+    const touch = ('ontouchstart' in window) || (navigator.maxTouchPoints && navigator.maxTouchPoints > 0) || (mq && mq.matches);
+    setShowFrame(!touch);
+    const onChange = (e) => setShowFrame(!(e.matches));
+    if (mq && mq.addEventListener) mq.addEventListener('change', onChange);
+    else if (mq && mq.addListener) mq.addListener(onChange);
+    return () => {
+      if (mq && mq.removeEventListener) mq.removeEventListener('change', onChange);
+      else if (mq && mq.removeListener) mq.removeListener(onChange);
+    };
+  }, []);
   return (
     <div style={{ width:"100vw", height:"100vh", overflow:"hidden", display:"flex", alignItems:"center", justifyContent:"center", background:P.avena, fontFamily:pro, position:"relative" }}>
       <div aria-hidden="true" style={{ position:"absolute", inset:0, backgroundImage:`url(${noiseMap})`, backgroundRepeat:"repeat", backgroundSize:"280px 280px", opacity:0.14, mixBlendMode:"multiply", pointerEvents:"none" }} />
-      <PhoneFrame>
-        <div style={{ height:"100%" }}>
+      {showFrame ? (
+        <PhoneFrame>
+          <div style={{ height:"100%" }}>
+            {screen==="home" && <HomeScreen onHistory={() => setScreen("history")} onProfile={() => setScreen("profile")} onNotifications={() => setScreen("notifications")} />}
+            {screen==="history" && <HistoryScreen onBack={() => setScreen("home")}/>} 
+            {screen==="profile" && <ProfileScreen onBack={() => setScreen("home")}/>} 
+            {screen==="notifications" && <NotificationsScreen onBack={() => setScreen("home")}/>} 
+          </div>
+        </PhoneFrame>
+      ) : (
+        <div style={{ width:"100%", height:"100%" }}>
           {screen==="home" && <HomeScreen onHistory={() => setScreen("history")} onProfile={() => setScreen("profile")} onNotifications={() => setScreen("notifications")} />}
-          {screen==="history" && <HistoryScreen onBack={() => setScreen("home")} />}
-          {screen==="profile" && <ProfileScreen onBack={() => setScreen("home")} />}
-          {screen==="notifications" && <NotificationsScreen onBack={() => setScreen("home")} />}
+          {screen==="history" && <HistoryScreen onBack={() => setScreen("home")}/>} 
+          {screen==="profile" && <ProfileScreen onBack={() => setScreen("home")}/>} 
+          {screen==="notifications" && <NotificationsScreen onBack={() => setScreen("home")}/>} 
         </div>
-      </PhoneFrame>
+      )}
     </div>
   );
 }
