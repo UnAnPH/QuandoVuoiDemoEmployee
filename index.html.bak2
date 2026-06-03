@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>QuandoVuoi — Employee v2</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #E7FE55; display: flex; align-items: center; justify-content: center; min-height: 100vh; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+    #__bundler_loading { position: fixed; bottom: 20px; right: 20px; font: 13px/1.4 -apple-system, BlinkMacSystemFont, sans-serif; color: #666; background: #fff; padding: 8px 14px; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.12); z-index: 10000; }
+    #__bundler_thumbnail { position: fixed; inset: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: #E7FE55; z-index: 9999; }
+    #__bundler_thumbnail svg { width: 100%; height: 100%; object-fit: contain; }
+    #__bundler_placeholder { color: #999; font-size: 14px; }
+  </style>
+  
+</head>
+<body>
+  <div id="__bundler_thumbnail">
+  <svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
+    <rect width="1200" height="800" fill="#E7FE55"></rect>
+    <text x="600" y="470" font-family="Georgia, serif" font-size="280" font-weight="500" fill="#282828" text-anchor="middle" letter-spacing="-10">qv</text>
+  </svg>
+</div>
+  <div id="__bundler_loading">Unpacking...</div>
+
+  <noscript>
+    <style>#__bundler_loading { display: none; }</style>
+    <div style="position:fixed;bottom:12px;left:12px;font:13px/1.4 -apple-system,BlinkMacSystemFont,sans-serif;color:#999;background:rgba(255,255,255,0.9);padding:6px 12px;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,0.08);z-index:10000;">
+      This page requires JavaScript to display.
+    </div>
+  </noscript>
+
+  <script>
+    
+document.addEventListener('DOMContentLoaded', async function() {
+  const loading = document.getElementById('__bundler_loading');
+  function setStatus(msg) { if (loading) loading.textContent = msg; }
+
+  // Error sink persists across replaceWith since it's on window, not the DOM.
+  window.addEventListener('error', function(e) {
+    var p = document.body || document.documentElement;
+    var d = document.getElementById('__bundler_err') || p.appendChild(document.createElement('div'));
+    d.id = '__bundler_err';
+    d.style.cssText = 'position:fixed;bottom:12px;left:12px;right:12px;font:12px/1.4 ui-monospace,monospace;background:#2a1215;color:#ff8a80;padding:10px 14px;border-radius:8px;border:1px solid #5c2b2e;z-index:99999;white-space:pre-wrap;max-height:40vh;overflow:auto';
+    d.textContent = (d.textContent ? d.textContent + String.fromCharCode(10) : '') +
+      '[bundle] ' + (e.message || e.type) +
+      (e.filename ? ' (' + e.filename.slice(0, 60) + ':' + e.lineno + ')' : '');
+  }, true);
+
+  try {
+    const manifestEl = document.querySelector('script[type="__bundler/manifest"]');
+    const templateEl = document.querySelector('script[type="__bundler/template"]');
+    if (!manifestEl || !templateEl) {
+      setStatus('Error: missing bundle data');
+      console.error('[bundler] Missing script tags — manifestEl:', !!manifestEl, 'templateEl:', !!templateEl);
+      return;
+    }
+
+    const manifest = JSON.parse(manifestEl.textContent);
+    let template = JSON.parse(templateEl.textContent);
+
+    const uuids = Object.keys(manifest);
+    setStatus('Unpacking ' + uuids.length + ' assets...');
+
+    const blobUrls = {};
+    await Promise.all(uuids.map(async (uuid) => {
+      const entry = manifest[uuid];
+      try {
+        const binaryStr = atob(entry.data);
+        const bytes = new Uint8Array(binaryStr.length);
+        for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+
+        let finalBytes = bytes;
+        if (entry.compressed) {
+          if (typeof DecompressionStream !== 'undefined') {
+            const ds = new DecompressionStream('gzip');
+            const writer = ds.writable.getWriter();
+            const reader = ds.readable.getReader();
+            writer.write(bytes);
+            writer.close();
+            const chunks = [];
+            let totalLen = 0;
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              chunks.push(value);
+              totalLen += value.length;
+            }
+            finalBytes = new Uint8Array(totalLen);
+            let offset = 0;
+            for (const chunk of chunks) { finalBytes.set(chunk, offset); offset += chunk.length; }
+          } else {
+            console.warn('DecompressionStream not available, asset ' + uuid + ' may not render');
+          }
+        }
+
+        blobUrls[uuid] = URL.createObjectURL(new Blob([finalBytes], { type: entry.mime }));
+      } catch (err) {
+        console.error('Failed to decode asset ' + uuid + ':', err);
+        blobUrls[uuid] = URL.createObjectURL(new Blob([], { type: entry.mime }));
+      }
+    }));
+
+    const extResEl = document.querySelector('script[type="__bundler/ext_resources"]');
+    const extResources = extResEl ? JSON.parse(extResEl.textContent) : [];
+    const resourceMap = {};
+    for (const entry of extResources) {
+      if (blobUrls[entry.uuid]) resourceMap[entry.id] = blobUrls[entry.uuid];
+    }
+
+    setStatus('Rendering...');
+    for (const uuid of uuids) template = template.split(uuid).join(blobUrls[uuid]);
+
+    // Strip integrity + crossorigin — blob URLs from a file:// document inherit
+    // a null origin, so crossorigin forces a CORS fetch that SRI then rejects.
+    // The manifest bytes are ours; SRI protects against CDN compromise, not this.
+    template = template.replace(/\s+integrity="[^"]*"/gi, '').replace(/\s+crossorigin="[^"]*"/gi, '');
+
+    const resourceScript = '<script>window.__resources = ' +
+      JSON.stringify(resourceMap).split('</' + 'script>').join('<\\/' + 'script>') +
+      ';</' + 'script>';
+    // Inject after <head> so the DOCTYPE stays first; prepending the script
+    // would push the parser into quirks mode. DOMParser always emits a <head>
+    // (synthesizing one if the source HTML omitted it) but may carry
+    // attributes through, so match the full opening tag. slice() rather than
+    // replace() keeps us clear of $-pattern substitution in resourceScript.
+    const headOpen = template.match(/<head[^>]*>/i);
+    if (headOpen) {
+      const i = headOpen.index + headOpen[0].length;
+      template = template.slice(0, i) + resourceScript + template.slice(i);
+    }
+
+    // Parse the template and swap the root element. Scripts inserted via
+    // DOMParser/replaceWith are inert per spec — re-create each with
+    // createElement so they execute, awaiting onload for src scripts to
+    // preserve ordering (React before ReactDOM before Babel before text/babel).
+    const doc = new DOMParser().parseFromString(template, 'text/html');
+    document.documentElement.replaceWith(doc.documentElement);
+    const dead = Array.from(document.scripts);
+    for (const old of dead) {
+      const s = document.createElement('script');
+      for (const a of old.attributes) s.setAttribute(a.name, a.value);
+      s.textContent = old.textContent;
+      // text/babel scripts with a src: fetch and inline. transformScriptTags
+      // does XHR against the src, but blob:null/ from a file:// origin is
+      // silently dropped. Inlining makes it a plain inline babel script,
+      // which transformScriptTags handles unconditionally.
+      if ((s.type === 'text/babel' || s.type === 'text/jsx') && s.src) {
+        const r = await fetch(s.src);
+        s.textContent = await r.text();
+        s.removeAttribute('src');
+      }
+      const p = s.src ? new Promise(function(r) { s.onload = s.onerror = r; }) : null;
+      old.replaceWith(s);
+      if (p) await p;
+    }
+    // Babel standalone auto-transforms type=text/babel on DOMContentLoaded,
+    // which fired before we swapped the document. Trigger manually if present.
+    if (window.Babel && typeof window.Babel.transformScriptTags === 'function') {
+      window.Babel.transformScriptTags();
+    }
+  } catch (err) {
+    setStatus('Error unpacking: ' + err.message);
+    console.error('Bundle unpack error:', err);
+  }
+});
+
+  </script>
+
+  <script type="__bundler/manifest">
+{"f983dc98-0c55-40e1-9fbb-97cd911c3f37":{"mime":"image/svg+xml","compressed":true,"data":"H4sIAAAAAAAACr2UUW/aMBDH3/kU1vVleygkgYl1wkgFiWoPbaWV7hUZ55JYc+zMdgh8+8lOSoAh3jZZimzn7nf/O589s7ucNCJ1BYV4Mp4AKVDkhaPwNU6A7AQ2C72nEJGI+P8kbGdCSgpKKwSyL6WyFArnqm+jUdM0w2Y81CYfJVEUjewuh/lglhNdMS7cgUI0jKaB4NBQqI38dNcuoo3axOOH6SaZRNFn72WQuxviWhVNIRzCfDby1vPBbJTPB7MUMzsfzFowESmFKzGA+MSAHML3ZhyH5l0JZynUFs1bxTi+qneLQLiW2twL5dBUWjIntLpvHSwF++Np4RPJcCW1Tknmv/d9KYAYtLV0FBaM/8qNrlX6vWQ5rsTep9T5BcJCokpJqVP0lTclk0CEovCma8PxybCqENxvJVdpx0i2YBW28IAM8HVttrVExZG4Q4UUMsO4Y/JFC5/klllcGfxdo+IHCglJgFgnHC/WQqJPNCyAqLp85Y7t/N64j6lajEVMKUwmD0kbv48aRCx9KZ+ZM2IfMuu8WkGyLoViiuNaP8qqYD2c+WUrNFBPMB22rLRC5daGKZv5flBnXkdSOEtMw27cnVut+GMnIRWWG3ReEttK/Mlk7fOMyf8Y0T8fXcP5hP01ulK4vpxWOCS6QsOcNhSE6hqvba5Q4PNinrdCvJSiqjD9OLCO+NdNCQwKd1+m48VycnFQcbC8vCY35Z0H72V2qAv+NXXPaHI82mGWIXfxJnBPHpbe9EWnGOKcXLvjjytmp5FP7T6WYRqeFz/rnjn/ys7/AMB2wMrKBQAA"},"77ef40e2-9de4-4a32-b1cb-a90fe9d68b6d":{"mime":"image/svg+xml","compressed":true,"data":"H4sIAAAAAAAACq1aO5Mtt3HO/StQN1cT/UA/XLoKPMkGZ9MNNnOJ1ySraFJFUaR+vutrzMzeXbvKChid8w0eDTQa/cSf//7bd+P3H7799fvPn9Lj0/j+yw/fff/r509s9mn89sOX3//j539+/jTHHOkx+ut//fDjj58//fTzT18+jX/+948//f3zp+9//fVv//7NN7///jv9rvTzL999I3POb/7+23ef/vJvf/7bf/76/fj286dnNyNPHsxGKXrcWIymxXBLqlqDpcjLhq+gKr/w4e40/a05gjxzsCxaS4dnULINlkmz7CUEP8f12Y2Wg0pa41VkKdzTsKyxnNI8X5aTpByeoDKW0cqoEZPJS8aa5LpkxCyK5cOEdOlT8CTlfAHttDhOPFiSYukI1l4zq9JMGSGTzNZgXVTTX1idMGwmJYY1HF5BXDxYi3LV8EzsAefwdG7rhdVogpnX7hUzR/edUwaLk05vzDVYFNt+vDUrCbgUQViOkEoNX0UsAkLDTamU8f9wneTs+7sIrSW9BV7yhoWpwm/2n59v9nM1XkVSWsNZyP4P9otR1ViL1GYOVyfnAPt7c2bEXBf3T0F6OQXr9RLSv/7jl1++/PTr8fOPP//y6S9//gaSeAkkevzpl3/8+OXzpy+/ffnp52+//TT++uMPf/v4DYIbIbQE1JYxHzmZpqwLjxQlyN+iNZdfsIQqI48TnpIxck7y1Rw8pwVjw4xWxP4sELXsEb7yxteEF970YmCs1r2a94t9vRfvlDH9iLUo9YQY7CS+cDyxJG98EzsxTtVHLKfJ0QLpcW+g0RGZlOp3YyVF3CNPdM974k03RmTRSr+WOd6v+g8/0cU0uWQ41eLIw4Nq+Y1H4rD6bIgjdGSRhcrYl8mOSpo5NMlw4jyFDCplkSqvG4dRiMtx4XKSsBoVNJesVoSRNtJp5Yy+q2nyyCB2l9YetvLAtTdwnWnVwmLSq1qZaPEoJt/tBqVylJJ5a5FFi2XUonTjxl"}}
+  </script>
+
+  <script type="__bundler/ext_resources">
+[{"id":"noise","uuid":"f983dc98-0c55-40e1-9fbb-97cd911c3f37"},{"id":"logo","uuid":"77ef40e2-9de4-4a32-b1cb-a90fe9d68b6d"}]
+  </script>
+
+  <script type="__bundler/template">
+"<!DOCTYPE html>\n<html lang=\"it\"><head>\n<meta charset=\"utf-8\">\n<title>QuandoVuoi — Employee v2<\\/title>\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n\n\n\n<style>\n  html, body { margin: 0; padding: 0; height: 100%; background: #F1F3E7; }\n  #employee-v2-root { width: 100%; height: 100%; }\n<\\/style>\n<style>\n@font-face {\n  font-family: 'Roslindale Display';\n  src: url(\"9f218a1b-4a7b-4fc2-8add-3fb9bbf2b489\") format('opentype');\n  font-weight: 400; font-style: normal; font-display: swap;\n}\n@font-face {\n  font-family: 'Roslindale Display';\n  src: url(\"1238020e-7439-4bb7-8c40-63878d74ee8c\") format('opentype');\n  font-weight: 500; font-style: normal; font-display: swap;\n}\n@font-face {\n  font-family: 'Roslindale Display';\n  src: url(\"702ba175-58cb-4aaf-9208-c86f44b503a3\") format('opentype');\n  font-weight: 600; font-style: normal; font-display: swap;\n}\n@font-face {\n  font-family: 'Aeonik Fono';\n  src: url(data:font/ttf;base64,AAEAAAAVAQAABABQRFNJRwAAAAEAAiGUAAAACEdERUZpwHN1AADa7AAAA5BHUE9THObxaAAA3nwAAFy2R1NVQrp+i2QAATs0AAAKCkhWQVI1ZPl1AAFFQAAABu9PUy8yiZ3PeAAAAdgAAABgU1RBVID0dUUAAUwwAAAAfmF2YXLtf/M0AAFMsAAAACZjbWFwHyOg4gAADBgAABcUZnZhcoykdTAAAUzYAAAAamdhc3AAAAAQAADa5AAAAAhnbHlmNSSrSAAAKCgAAJNaZ3ZhcjfOOGMAAU1EAADUTmhlYWQdrjzzAAABXAAAADZoaGVhBjEDLgAAAZQAAAAkaG10eFcai04AAAI4AAAJ4GxvY2HDO56jAAAjNAAABPJtYXhwAosAyAAAAbgAAAAgbmFtZe5YBGEAALuEAAAJs3Bvc3QHx16uAADFOAAAFaxwcmVwaAaMhQAAIywAAAAHAAEAAAABAACb4oAoXw889QADA+gAAAAA3ejPJwAAAADeJyol/zj/MgNPA5IAAAAGAAIAAAAAAAAAAQAAA6f/MwAAA3f/OP4LA08AAQAAAAAAAAAAAAAAAAAAAngAAQAAAngAZQAJAGEABgABAAAAAAAAAAAAAAAAAAMAAQAEAjkBkAAFAAQCigJYAAAASwKKAlgAAAFeADwBHgAAAgsABAMDAAAAAIAAAEcAACBzAAAAAAAAAABCTFNUAMAADf//A6f/MwAAA6cAzQAAABMAAAAAAf4CvAAAACAAAwKUAFACWAAAAlgAAAFUAAACiAAWAnYAUAKZADUCnwBQAjQAUAIcAFACrgA1AosAUAIMAEECRAAeAg4AHgJ/AFAB/wBQAr8AUAKWAFACrAA1AmsAUAKxADUCrAA1AnMAUAJ3ADgCWQAeAowASAJ4ABACswAcAnwAFgKBABQCeQA8AkYANQJ5ADUCMwA1AnkATgI/ADUCeQA1Ak4ANQHDABQCKAAtAnkANQJYAE4B1wAtAZ8AFAIuAE4B0gAoAx8ATgJTAE4CZAA1AnkATgJ5ADUB9QAtAgcALQHVABQCTgBJAg8ADwKgABwCAQAMAhAADwJOAEkCEwAqAogAFgKIABYCiAAWAogAFgKIABYCiAAWAogAFgKIABYCiAAWAxsAFgMbABYCmQA1ApkANQKZADUCmQA1ApkANQKkAAgCnwBQAqQACAI0AFACNABQAjQAUAI0AFACNABQAjQAUAI0AFACNABQAjQAUAKuADUCrgA1Aq4ANQKuADUClAAPAosAUAJ2AEgCDABBAgwAQQIMAEECDABBAgwAQQIMAEECDABBAgwAQQIMAEECRAAeAg4AHgJ/AFAB/wBQAf8AUAH/AFACPgBQAgkADwKWAFAClgBQApYAUAKWAFAClgBQAqwANQKsADUCrAA1AqwANQKsADUCrAA1AqwANQKsACsCrAA1A3cANQJyAFACcwBQAnMAUAJzAFACdwA4AncAOAJ3ADgCdwA4AncAOAJZAB4CWQAeAlkAHgJZAB4CjABIAowASAKMAEgCjABIAowASAKMAEgCjABIAowASAKMAEgCjABIArMAHAKzABwCswAcArMAHAKBABQCgQAUAoEAFAKBABQCeQA8AnkAPAJ5ADwCRgA1AnkANQIzADUCRgA1AnkANQIzADUCRgA1AnkANQIzADUCRgA1AnkANQIzADUCRgA1AnkANQIzADUCRgA1AnkANQIzADUCRgA1AnkANQIzADUCRgA1AnkANQIzADUDOgA1AzoANQI/ADUCPwA1Aj8ANQI/ADUCPwA1AmwANQKIADUCfgA1Ak4ANQJOADUCTgA1Ak4ANQJOADUCTgA1Ak4ANQJOADUCTgA1AnkANQJ5ADUCeQA1AnkANQJdAAgCWP/SAdcALQHXAC0B1wAtAdcALQHXAC0B1wAtAfIAOAHXAC0B1wAtAdcALQGfABQBnwAU [truncated]"
+  </script>
+
+</body>
+</html>
